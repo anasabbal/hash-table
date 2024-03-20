@@ -7,6 +7,7 @@
 
 #include "../include/hash_table.h"
 #include "../include/prime.h"
+#include "../include/xmalloc.h"
 
 
 //#define HT_PRIME_1 151;
@@ -41,7 +42,7 @@ static ht_item *ht_new_item(const char* k, const char* v) {
     return i;
 }
 static ht_hash_table *ht_new_sized(const int base_size){
-    ht_hash_table *ht = malloc(sizeof(ht_hash_table));
+    ht_hash_table *ht = xmalloc(sizeof(ht_hash_table));
     if (ht == NULL) {
         LOG("Failed to allocate memory for ht_hash_table");
         return NULL;
@@ -50,11 +51,11 @@ static ht_hash_table *ht_new_sized(const int base_size){
     ht->size = next_prime(ht->base_size);
 
     ht->count = 0;
-    ht->items = calloc((size_t) ht->size, sizeof(ht_item*));
+    ht->items = xcalloc((size_t) ht->size, sizeof(ht_item*));
     return ht;
 }
 ht_hash_table* ht_new() {
-    return ht_new_sized(200);
+    return ht_new_sized(0);
 }
 
 static void ht_del_item(ht_item* i) {
@@ -83,11 +84,7 @@ static int ht_hash(const char *s, const int a, const int m){
     long hash = 0;
     const int len_s = strlen(s);
     for(int i = 0; i < len_s; i++){
-        //printf("Iteration %d:\n", i + 1);
-        //printf(" - Current character: %c\n", s[i]);
-        //printf(" - Current length of string: %d\n", len_s - (i + 1));
         hash += (long)pow(a, len_s - (i+1)) *s[i];
-        //printf(" - Current hash value: %ld\n", hash);
         hash = hash % m;
     }
     printf("Final hash value = %ld\n", hash);

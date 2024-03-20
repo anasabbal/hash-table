@@ -1,3 +1,5 @@
+#ifndef HASH_TABLE_H_
+#define HASH_TABLE_H_
 
 
 // our key-value pairs (items) will each be stored in a struct
@@ -21,3 +23,6 @@ char* ht_search(ht_hash_table* ht, const char* key);
 void ht_delete(ht_hash_table* h, const char* key);
 void ht_del_hash_table(ht_hash_table* ht);
 ht_hash_table* ht_new();
+
+
+#endif  // HASH_TABLE_H_
