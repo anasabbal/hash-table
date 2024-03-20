@@ -5,6 +5,7 @@
 
 
 #include "../include/hash_table.h"
+#include "../include/prime.h"
 
 
 //#define HT_PRIME_1 151;
@@ -38,23 +39,21 @@ static ht_item *ht_new_item(const char* k, const char* v) {
     printf("Memory address of ht: %p\n", (void*)i);
     return i;
 }
-
-ht_hash_table* ht_new() {
-    ht_hash_table* ht = malloc(sizeof(ht_hash_table));
+static ht_hash_table *ht_new_sized(const int base_size){
+    ht_hash_table *ht = xmalloc(sizeof(ht_hash_table));
     if (ht == NULL) {
         LOG("Failed to allocate memory for ht_hash_table");
         return NULL;
     }
-    ht->size = 53;
+    ht->base_size = base_size;
+    ht->size = next_prime(ht->base_size);
+
     ht->count = 0;
-    ht->items = calloc((size_t)ht->size, sizeof(ht_item*));
-    if (ht->items == NULL) {
-        LOG("Failed to allocate memory for items array");
-        free(ht);
-        return NULL;
-    }
-    printf("Memory address of ht: %p\n", (void*)ht);
+    ht->items = xcalloc((size_t) ht->size, sizeof(ht_item*));
     return ht;
+}
+ht_hash_table* ht_new() {
+    return ht_new_sized(200);
 }
 
 static void ht_del_item(ht_item* i) {
