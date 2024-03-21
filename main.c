@@ -1,38 +1,254 @@
 // main.c
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "include/hash_table.h"
+#include "include/prime.h"
+
+
+
+// MinUnit testing framework. http://www.jera.com/techinfo/jtns/jtn002.html
+#define mu_assert(message, test) do { if (!(test)) return message; } while (0)
+#define mu_run_test(test) do { char *message = test(); tests_run++; \
+                            if (message) return message; } while (0)
+#define strings_equal(a, b) strcmp(a, b) == 0
+
+
+int tests_run = 0;
+
+
+static char* test_insert() {
+    ht_hash_table* ht = ht_new();
+
+    ht_insert(ht, "k", "v");
+
+    // Check only one item in hash table
+    int count = 0;
+    for (int i = 0; i < ht->size; i++) {
+        if (ht->items[i] != NULL) {
+            count++;
+        }
+    }
+    mu_assert("error, num items in ht != 1", count == 1);
+
+    // Check item has correct key, value, next, previous
+    for (int i = 0; i < ht->size; i++) {
+        if (ht->items[i] != NULL) {
+            ht_item* cur_item = ht->items[i];
+            mu_assert("error, key != k", strcmp(cur_item->key, "k") == 0);
+            mu_assert("error, key != v", strcmp(cur_item->value, "v") == 0);
+        }
+    }
+
+    // Tests passed
+    ht_del_hash_table(ht);
+    return 0;
+}
+
+
+static char* test_insert_lots_of_items() {
+    ht_hash_table* ht = ht_new();
+    for (int i = 0; i < 20000; i++) {
+        char key[10];
+        snprintf(key, 10, "%d", i);
+        ht_insert(ht, key, "value");
+    }
+    return 0;
+}
+
+
+static char* test_insert_with_duplicate_key() {
+    ht_hash_table* ht = ht_new();
+    ht_insert(ht, "key", "value 1");
+    ht_insert(ht, "key", "value 2");
+
+    mu_assert("error, expecting ht->count == 1 ", ht->count == 1);
+
+    return 0;
+}
+
+
+static char* test_search_with_invalid_key() {
+    // New empty hash table
+    ht_hash_table* ht = ht_new();
+    char* value = ht_search(ht, "invalid_key");
+    mu_assert("error, invalid key should return NULL", value == NULL);
+    ht_del_hash_table(ht);
+    return 0;
+}
+
+
+static char* test_search_with_valid_key() {
+    ht_hash_table* ht = ht_new();
+    ht_insert(ht, "k", "v");
+    char* value = ht_search(ht, "k");
+    mu_assert("error, unexpected value", strings_equal(value, "v")); 
+    ht_del_hash_table(ht);
+    return 0;
+}
+
+
+static char* test_search_with_colliding_keys() {
+    // I know from manual testing that the strings "bz" and "4" collide using
+    // ht_hash, with an m value of 53.
+    ht_hash_table* ht = ht_new();
+
+    ht_insert(ht, "bz", "bz value");
+    ht_insert(ht, "4", "4 value");
+
+    char* value_a = ht_search(ht, "bz");
+    char* value_b = ht_search(ht, "4");
+
+    mu_assert("error, insert_item_a != item_a", 
+        strings_equal(value_a, "bz value")); 
+    mu_assert("error, insert_item_b != item_b", 
+        strings_equal(value_b, "4 value")); 
+
+    ht_del_hash_table(ht);
+    return 0;
+}
+
+
+static char* test_delete() {
+    ht_hash_table* ht = ht_new();
+    ht_insert(ht, "k", "v");
+    ht_delete(ht, "k");
+    char* value = ht_search(ht, "k");
+    mu_assert("error, value != NULL", value == NULL); 
+    ht_del_hash_table(ht);
+    return 0;
+}
+
+
+static char* test_resize_up() {
+    // Smallest ht size is 53. Table resizes when a load ratio of 0.7 is hit.
+    // This should happen on the 38'th insert.
+    ht_hash_table* ht = ht_new();
+    for (int i = 0; i < 38; i++) {
+        char key[10];
+        snprintf(key, 10, "%d", i);
+        ht_insert(ht, key, "value");
+    }
+    mu_assert("error, ht should be size 53", ht->size == 53);
+
+    ht_insert(ht, "one extra", "value");
+    mu_assert("error, ht should be size 101", ht->size == 101);
+
+    ht_del_hash_table(ht);
+    return 0;
+}
+
+
+static char* test_resize_down() {
+    // Smallest ht size is 53. Table resizes when a load ratio of 0.7 is hit.
+    // This should happen on the 38'th insert.
+    ht_hash_table* ht = ht_new();
+    for (int i = 0; i < 39; i++) {
+        char key[10];
+        snprintf(key, 10, "%d", i);
+        ht_insert(ht, key, "value");
+    }
+    mu_assert("error, ht should be size 101", ht->size == 101);
+
+    // Hash table should resize down when we hit 10 objects.
+    for (int i = 0; i < 30; i++) {
+        char key[10];
+        snprintf(key, 10, "%d", i);
+        ht_delete(ht, key);
+    }
+
+    /* ht_delete(ht, "0"); */
+    mu_assert("error, ht should be size 53", ht->size == 53);
+
+    ht_del_hash_table(ht);
+    return 0;
+}
+static char* test_is_prime() {
+    typedef struct {
+        int in;
+        int expected;
+    } test_case;
+    
+    test_case* test_cases[] = {
+        &(test_case) {-1, -1},
+        &(test_case) {0, -1},
+        &(test_case) {1, -1},
+        &(test_case) {2, 1},
+        &(test_case) {3, 1},
+        &(test_case) {4, 0},
+        &(test_case) {5, 1},
+        &(test_case) {13, 1},
+        &(test_case) {51, 0},
+    };
+
+    int num_test_cases = sizeof(test_cases)/sizeof(test_case*);
+
+    for (int i = 0; i < num_test_cases; i++) {
+        test_case* tc = test_cases[i];
+        /* printf("%d: ", tc->in); */
+        /* printf("%d: ", is_prime(tc->in)); */
+        /* printf("%d\n", tc->expected); */
+        mu_assert("is_prime returned incorrect result", 
+            is_prime(tc->in) == tc->expected);
+    }
+    return 0;
+}
+
+
+static char* test_next_prime() {
+    typedef struct {
+        int in;
+        int expected;
+    } test_case;
+    
+    test_case* test_cases[] = {
+        &(test_case) {-1, 2},
+        &(test_case) {0, 2},
+        &(test_case) {1, 2},
+        &(test_case) {2, 2},
+        &(test_case) {3, 3},
+        &(test_case) {4, 5},
+        &(test_case) {5, 5},
+        &(test_case) {50, 53},
+    };
+
+    int num_test_cases = sizeof(test_cases)/sizeof(test_case*);
+
+    for (int i = 0; i < num_test_cases; i++) {
+        test_case* tc = test_cases[i];
+        /* printf("%d: ", tc->in); */
+        /* printf("%d: ", next_prime(tc->in)); */
+        /* printf("%d\n", tc->expected); */
+        mu_assert("next_prime returned incorrect result", 
+            next_prime(tc->in) == tc->expected);
+    }
+    return 0;
+}
+
+static char* all_tests() {
+    mu_run_test(test_insert);
+    mu_run_test(test_insert_lots_of_items);
+    mu_run_test(test_insert_with_duplicate_key);
+    mu_run_test(test_search_with_invalid_key);
+    mu_run_test(test_search_with_valid_key);
+    mu_run_test(test_search_with_colliding_keys);
+    mu_run_test(test_delete);
+    mu_run_test(test_resize_up);
+    mu_run_test(test_resize_down);
+    mu_run_test(test_is_prime);
+    mu_run_test(test_next_prime);
+    return 0;
+}
 
 
 int main() {
-    ht_hash_table* ht = ht_new();
-
-    // test insert
-    ht_insert(ht, "key1", "value1");
-    //ht_insert(ht, "key2", "value2");
-    //ht_insert(ht, "key3", "value3");
-
-    // search for a key
-    char* result = ht_search(ht, "key2");
-    if (result != NULL) {
-        printf("Value for key2: %s\n", result);
+    char* result = all_tests();
+    if (result != 0) {
+        printf("%s\n", result);
     } else {
-        printf("Key2 not found\n");
+        printf("all tests passed\n");
     }
-
-    // delete a key
-    ht_delete(ht, "key2");
-
-    // search for the deleted key
-    result = ht_search(ht, "key2");
-    if (result != NULL) {
-        printf("Value for key2: %s\n", result);
-    } else {
-        printf("Key2 not found after deletion\n");
-    }
-
-    ht_del_hash_table(ht);
-
-    return 0;
+    printf("%d tests run\n", tests_run);
+    return result != 0;
 }
